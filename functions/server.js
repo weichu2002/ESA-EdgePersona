@@ -3,11 +3,9 @@
  * Handles API requests for EdgePersona
  */
 
-// EdgeKV is available globally in the ESA runtime, but we structure it cleanly.
-// We use the namespace 'edge_persona_kv' which MUST be created in the ESA console.
 const KV_NAMESPACE = "edge_persona_kv";
 
-async function handleRequest(request) {
+async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
 
@@ -17,15 +15,14 @@ async function handleRequest(request) {
   } else if (path === '/api/persona' && request.method === 'POST') {
     return await savePersona(request);
   } else if (path === '/api/chat' && request.method === 'POST') {
-    return await handleChat(request);
+    // Pass env to handleChat to access API Key
+    return await handleChat(request, env);
   } else if (path === '/api/event' && request.method === 'POST') {
     return await saveEvent(request);
   } else if (path === '/api/reset' && request.method === 'POST') {
      return await resetData(request);
   }
 
-  // If request is not /api/*, it falls through to static assets (handled by ESA Pages routing usually)
-  // But inside the function trigger, we return 404 for API calls that don't match.
   return new Response("API Endpoint Not Found", { status: 404 });
 }
 
@@ -70,11 +67,9 @@ async function saveEvent(request) {
     const { userId, event } = await request.json();
     const edgeKV = new EdgeKV({ namespace: KV_NAMESPACE });
     
-    // Get existing events
     let events = await edgeKV.get(`user_${userId}_events`, { type: "json" }) || [];
-    
     const newEvent = { ...event, id: Date.now().toString() };
-    events.unshift(newEvent); // Add to top
+    events.unshift(newEvent);
     
     await edgeKV.put(`user_${userId}_events`, JSON.stringify(events));
     
@@ -93,12 +88,11 @@ async function resetData(request) {
    return new Response(JSON.stringify({ success: true }));
 }
 
-async function handleChat(request) {
+async function handleChat(request, env) {
   try {
     const { userId, message } = await request.json();
     const edgeKV = new EdgeKV({ namespace: KV_NAMESPACE });
 
-    // 1. Parallel Retrieval of Memory
     const [profile, history, events] = await Promise.all([
       edgeKV.get(`user_${userId}_profile`, { type: "json" }),
       edgeKV.get(`user_${userId}_history`, { type: "json" }) || [],
@@ -107,7 +101,6 @@ async function handleChat(request) {
 
     if (!profile) return new Response("Persona not initialized", { status: 400 });
 
-    // 2. Build Dynamic Prompt
     const systemPrompt = `
       You are a digital persona named ${profile.name || "Avatar"}.
       You are NOT an AI assistant. You ARE the user's digital mirror.
@@ -129,21 +122,18 @@ async function handleChat(request) {
       - Keep responses concise unless asked to elaborate.
     `;
 
-    // 3. Prepare Messages for DeepSeek
-    const recentHistory = history.slice(-6); // Last 6 turns
+    const recentHistory = history.slice(-6);
     const messages = [
       { role: "system", content: systemPrompt },
       ...recentHistory,
       { role: "user", content: message }
     ];
 
-    // 4. Call DeepSeek (Aliyun Bailian)
-    // NOTE: DEEPSEEK_API_KEY must be set in ESA Console Environment Variables
-    // process.env is available in ESA functions if configured in console
-    const apiKey = process.env.DEEPSEEK_API_KEY; 
+    // CRITICAL FIX: Access API Key from env object, not process.env
+    const apiKey = env.DEEPSEEK_API_KEY; 
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Server misconfiguration: API Key missing" }), { status: 500 });
+      return new Response(JSON.stringify({ error: "Server misconfiguration: API Key missing in env. Check ESA Console." }), { status: 500 });
     }
 
     const aiResponse = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", {
@@ -153,27 +143,25 @@ async function handleChat(request) {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        model: "deepseek-v3", // Or deepseek-r1 based on availability in Bailian
+        model: "deepseek-v3",
         messages: messages,
-        temperature: 0.7 + (profile.traits.planningVsSpontaneity * 0.3) // Dynamic temperature based on traits
+        temperature: 0.7 + (profile.traits.planningVsSpontaneity * 0.3)
       })
     });
 
     const aiData = await aiResponse.json();
     
     if (!aiResponse.ok) {
-        throw new Error(`AI API Error: ${JSON.stringify(aiData)}`);
+        throw new Error(`AI API Error (${aiResponse.status}): ${JSON.stringify(aiData)}`);
     }
 
     const responseText = aiData.choices[0].message.content;
 
-    // 5. Update Short-term Memory (Async, don't block response too much, but KV await is fast)
     const newHistory = [
       ...history,
       { role: "user", content: message, timestamp: Date.now() },
       { role: "assistant", content: responseText, timestamp: Date.now() }
     ];
-    // Keep history manageable (e.g., last 20 messages)
     if (newHistory.length > 20) newHistory.shift();
     if (newHistory.length > 20) newHistory.shift();
 
@@ -191,7 +179,8 @@ async function handleChat(request) {
 }
 
 export default {
-  fetch(request) {
-    return handleRequest(request);
+  // ESA Edge Routine Entry Point
+  fetch(request, env) {
+    return handleRequest(request, env);
   }
 };

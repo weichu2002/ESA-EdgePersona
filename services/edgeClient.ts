@@ -39,8 +39,23 @@ export const edgeClient = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, message }),
     });
-    if (!res.ok) throw new Error('Chat failed');
-    return await res.json(); // Returns the Assistant's response message
+
+    if (!res.ok) {
+      // Attempt to read the error details
+      let errorMessage = `Chat failed with status ${res.status}`;
+      try {
+        const errorData = await res.json();
+        errorMessage = errorData.error || JSON.stringify(errorData);
+        console.error("Server API Error Detail:", errorMessage);
+      } catch (e) {
+        // If not JSON, try text
+        const text = await res.text();
+        console.error("Server API Error Text:", text);
+      }
+      throw new Error(errorMessage);
+    }
+    
+    return await res.json(); 
   },
 
   // Log a life event
