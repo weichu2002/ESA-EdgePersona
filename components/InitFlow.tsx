@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CARDS } from '../constants';
 import { PersonaProfile, CardConfig } from '../types';
-import { ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check, AlertCircle } from 'lucide-react';
 
 interface Props {
   onComplete: (profile: PersonaProfile) => void;
@@ -13,11 +13,37 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [currentInput, setCurrentInput] = useState<any>('');
+  const [error, setError] = useState<string | null>(null);
 
   const currentCard = CARDS[currentIndex];
   const progress = ((currentIndex + 1) / CARDS.length) * 100;
 
+  const validateInput = (): boolean => {
+    if (currentCard.type === 'text' || currentCard.type === 'long-text') {
+      if (!currentInput || (typeof currentInput === 'string' && !currentInput.trim())) {
+        setError("此项不能为空，请填写内容。");
+        return false;
+      }
+    }
+    if (currentCard.type === 'choice') {
+      if (!currentInput) {
+        setError("请选择一个选项。");
+        return false;
+      }
+    }
+    if (currentCard.type === 'multi-choice') {
+      if (!currentInput || (Array.isArray(currentInput) && currentInput.length === 0)) {
+        setError("请至少选择一项。");
+        return false;
+      }
+    }
+    setError(null);
+    return true;
+  };
+
   const handleNext = () => {
+    if (!validateInput()) return;
+
     // Save current answer
     const newAnswers = { ...answers, [currentCard.key]: currentInput };
     setAnswers(newAnswers);
@@ -25,7 +51,9 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
     if (currentIndex < CARDS.length - 1) {
       setCurrentIndex(prev => prev + 1);
       // Reset input for next card, try to pre-fill if navigating back (not implemented for simplicity here)
-      setCurrentInput(getDefaultInput(CARDS[currentIndex + 1]));
+      const nextCard = CARDS[currentIndex + 1];
+      setCurrentInput(getDefaultInput(nextCard));
+      setError(null);
     } else {
       finish(newAnswers);
     }
@@ -40,7 +68,6 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
 
   const finish = (finalAnswers: Record<string, any>) => {
     // Transform flat answers to nested PersonaProfile object
-    // This is a simplified mapper. In a real app, use lodash.set or proper mapping
     const profile: PersonaProfile = {
       id: userId,
       name: "My Digital Self",
@@ -96,16 +123,22 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
               <textarea
                 className="w-full p-4 bg-gray-900 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-white h-32"
                 value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                placeholder="Type here..."
+                onChange={(e) => {
+                  setCurrentInput(e.target.value);
+                  if(error) setError(null);
+                }}
+                placeholder="请输入内容..."
               />
             ) : (
               <input
                 type="text"
                 className="w-full p-4 bg-gray-900 border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-white"
                 value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                placeholder="Separate multiple items with commas..."
+                onChange={(e) => {
+                  setCurrentInput(e.target.value);
+                  if(error) setError(null);
+                }}
+                placeholder="如果有多个项目，请用逗号分隔..."
               />
             )}
           </div>
@@ -122,7 +155,7 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
               min="0"
               max="1"
               step="0.01"
-              value={currentInput || 0.5}
+              value={currentInput !== '' ? currentInput : 0.5}
               onChange={(e) => setCurrentInput(parseFloat(e.target.value))}
               className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
             />
@@ -134,7 +167,10 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
             {currentCard.options?.map(opt => (
               <button
                 key={opt}
-                onClick={() => setCurrentInput(opt)}
+                onClick={() => {
+                  setCurrentInput(opt);
+                  if(error) setError(null);
+                }}
                 className={`p-4 rounded-xl text-left transition-all ${currentInput === opt ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
               >
                 {opt}
@@ -145,8 +181,12 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
       case 'multi-choice':
         const selected = (currentInput as string[]) || [];
         const toggle = (opt: string) => {
-          if (selected.includes(opt)) setCurrentInput(selected.filter(s => s !== opt));
-          else setCurrentInput([...selected, opt]);
+          let newVal;
+          if (selected.includes(opt)) newVal = selected.filter(s => s !== opt);
+          else newVal = [...selected, opt];
+          
+          setCurrentInput(newVal);
+          if (newVal.length > 0 && error) setError(null);
         };
         return (
           <div className="flex flex-col gap-3">
@@ -163,12 +203,10 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
           </div>
         );
       case 'sort':
-        // Simplified sort: just rendering list, assume user accepts default order for this demo to save complex DnD code
-        // In full version, implement drag and drop
         return (
-            <div className="text-gray-400 text-center italic">
-               (Drag and Drop simulation) Priority: {currentCard.options?.join(' > ')}
-               <button onClick={() => setCurrentInput(currentCard.options)} className="block mx-auto mt-4 text-blue-400">Confirm Order</button>
+            <div className="text-gray-400 text-center italic border border-gray-800 p-4 rounded-xl">
+               (拖拽排序模拟) 优先级: {currentCard.options?.join(' > ')}
+               <button onClick={() => setCurrentInput(currentCard.options)} className="block mx-auto mt-4 text-blue-400 text-sm">确认此顺序</button>
             </div>
         );
       default:
@@ -206,15 +244,26 @@ const InitFlow: React.FC<Props> = ({ onComplete, userId }) => {
             {currentCard.question}
           </h2>
 
-          <div className="mb-10">
+          <div className="mb-6">
             {renderInput()}
           </div>
+          
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 text-red-400 mb-6 bg-red-400/10 p-3 rounded-lg border border-red-400/20"
+            >
+              <AlertCircle size={18} />
+              <span className="text-sm">{error}</span>
+            </motion.div>
+          )}
 
           <button
             onClick={handleNext}
             className="group flex items-center gap-3 bg-white text-black px-8 py-3 rounded-full font-bold hover:bg-blue-50 transition-colors ml-auto"
           >
-            {currentIndex === CARDS.length - 1 ? "Initialize Persona" : "Continue"}
+            {currentIndex === CARDS.length - 1 ? "初始化人格" : "下一步"}
             <ArrowRight className="group-hover:translate-x-1 transition-transform" />
           </button>
         </motion.div>

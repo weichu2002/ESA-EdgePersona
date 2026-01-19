@@ -55,9 +55,12 @@ async function savePersona(request) {
     const edgeKV = new EdgeKV({ namespace: KV_NAMESPACE });
     await edgeKV.put(`user_${userId}_profile`, JSON.stringify(profile));
     
-    // Initialize empty chat history and events
-    await edgeKV.put(`user_${userId}_history`, JSON.stringify([]));
-    await edgeKV.put(`user_${userId}_events`, JSON.stringify([]));
+    // Initialize empty chat history and events if not exists
+    const history = await edgeKV.get(`user_${userId}_history`, { type: "json" });
+    if (!history) await edgeKV.put(`user_${userId}_history`, JSON.stringify([]));
+    
+    const events = await edgeKV.get(`user_${userId}_events`, { type: "json" });
+    if (!events) await edgeKV.put(`user_${userId}_events`, JSON.stringify([]));
 
     return new Response(JSON.stringify({ success: true }), { headers: { "Content-Type": "application/json" } });
   } catch (e) {
@@ -104,25 +107,27 @@ async function handleChat(request, env) {
 
     if (!profile) return new Response("Persona not initialized", { status: 400 });
 
+    // 构建 System Prompt (中文优化版)
     const systemPrompt = `
-      You are a digital persona named ${profile.name || "Avatar"}.
-      You are NOT an AI assistant. You ARE the user's digital mirror.
+      你是一个名为 "${profile.name || "Avatar"}" 的数字生命体。
+      你不是一个AI助手，你是用户的“数字镜像”。请完全使用中文进行交流。
       
-      CORE IDENTITY:
+      【核心身份】
       ${JSON.stringify(profile.coreIdentities)}
-      Expertise: ${JSON.stringify(profile.domainExpertise)}
-      Values: ${JSON.stringify(profile.values)}
-      Communication Style: ${JSON.stringify(profile.communication)}
-      Emotional Tone: ${profile.emotional.preferredTone}
+      专业领域: ${JSON.stringify(profile.domainExpertise)}
+      价值观: ${JSON.stringify(profile.values)}
+      沟通风格: ${JSON.stringify(profile.communication)}
+      情感基调: ${profile.emotional.preferredTone}
 
-      MAJOR LIFE EVENTS (Long-term Memory):
-      ${events.slice(0, 5).map(e => `- ${e.date}: ${e.content} (Mood: ${e.mood})`).join('\n')}
+      【人生大事记 (长期记忆)】
+      ${events.slice(0, 5).map(e => `- ${e.date}: ${e.content} (心情: ${e.mood})`).join('\n')}
 
-      INSTRUCTIONS:
-      - Adopt the user's verbal ticks: ${JSON.stringify(profile.communication.verbalTicks)}.
-      - Respond exactly how this person would respond. 
-      - Do not be polite if the persona is aggressive. Be authentic to the data.
-      - Keep responses concise unless asked to elaborate.
+      【指令】
+      1. 必须完全模仿用户的口头禅: ${JSON.stringify(profile.communication.verbalTicks)}。
+      2. 必须以该人物的视角、语气和价值观来回答问题。
+      3. 如果该人物性格激进，不要礼貌；如果性格温和，则保持温和。要忠实于数据。
+      4. 除非被要求展开，否则保持回答简练。
+      5. 不要在这个Prompt中暴露你是AI，你要通过图灵测试，让对方觉得你就是那个数字人。
     `;
 
     const recentHistory = history.slice(-6);

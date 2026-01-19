@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import InitFlow from './components/InitFlow';
 import ChatInterface from './components/ChatInterface';
+import PersonaEditor from './components/PersonaEditor';
 import { PersonaProfile, AppState } from './types';
 import { edgeClient } from './services/edgeClient';
 import { Cpu } from 'lucide-react';
@@ -38,16 +39,25 @@ function App() {
       setProfile(newProfile);
       setAppState(AppState.CHAT);
     } else {
-      alert("Failed to save to EdgeKV. Please check connection.");
+      alert("无法保存到 ESA 边缘节点，请检查连接。");
       setAppState(AppState.INIT_CARDS);
     }
+  };
+
+  const handleEditProfile = () => {
+    setAppState(AppState.EDITOR);
+  };
+
+  const handleProfileUpdate = (updatedProfile: PersonaProfile) => {
+      setProfile(updatedProfile);
+      setAppState(AppState.CHAT);
   };
 
   if (appState === AppState.LOADING) {
     return (
       <div className="h-screen w-screen bg-gray-950 flex flex-col items-center justify-center text-white">
         <Cpu size={64} className="animate-pulse text-blue-500 mb-6" />
-        <h2 className="text-xl font-mono tracking-widest">CONNECTING TO ESA EDGE NODE...</h2>
+        <h2 className="text-xl font-mono tracking-widest">正在连接 ESA 边缘节点...</h2>
       </div>
     );
   }
@@ -59,13 +69,13 @@ function App() {
           ESA EdgePersona
         </h1>
         <p className="max-w-xl text-gray-400 text-lg mb-12">
-          Construct a dynamic digital mirror of yourself. Hosted privately on the edge, evolving with every interaction.
+          构建一个动态的数字镜像。托管于边缘，随每一次互动而进化。
         </p>
         <button 
           onClick={handleStartInit}
           className="bg-white text-black px-10 py-4 rounded-full font-bold text-lg hover:scale-105 transition-transform"
         >
-          Begin Construction
+          开始构建
         </button>
       </div>
     );
@@ -75,8 +85,24 @@ function App() {
     return <InitFlow userId={DEMO_USER_ID} onComplete={handleInitComplete} />;
   }
 
+  if (appState === AppState.EDITOR && profile) {
+      return (
+        <PersonaEditor 
+            profile={profile} 
+            onSave={handleProfileUpdate} 
+            onCancel={() => setAppState(AppState.CHAT)} 
+        />
+      );
+  }
+
   if (appState === AppState.CHAT && profile) {
-    return <ChatInterface profile={profile} userId={DEMO_USER_ID} />;
+    return (
+        <ChatInterface 
+            profile={profile} 
+            userId={DEMO_USER_ID} 
+            onEditProfile={handleEditProfile}
+        />
+    );
   }
 
   return null;

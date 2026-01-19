@@ -55,6 +55,7 @@ export enum AppState {
   INIT_INTRO = 'INIT_INTRO',
   INIT_CARDS = 'INIT_CARDS',
   CHAT = 'CHAT',
+  EDITOR = 'EDITOR',
 }
 
 // Type for the card configuration
