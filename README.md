@@ -5,6 +5,7 @@
 </div>
 
 > **本项目由阿里云ESA提供加速、计算和保护**
+<img width="7534" height="844" alt="图片" src="https://github.com/user-attachments/assets/d4404257-5430-49b3-8977-f49a47fcd04e" />
 
 ---
 
