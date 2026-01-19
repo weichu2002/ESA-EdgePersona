@@ -5,6 +5,9 @@
 
 const KV_NAMESPACE = "edge_persona_kv";
 
+// Fallback Key to ensure the app works immediately if ESA Console Env vars fail
+const FALLBACK_API_KEY = "sk-26d09fa903034902928ae380a56ecfd3";
+
 async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -129,11 +132,11 @@ async function handleChat(request, env) {
       { role: "user", content: message }
     ];
 
-    // CRITICAL FIX: Access API Key from env object, not process.env
-    const apiKey = env.DEEPSEEK_API_KEY; 
+    // FIX: Try to get Key from Env, if failed, use Fallback
+    const apiKey = (env && env.DEEPSEEK_API_KEY) ? env.DEEPSEEK_API_KEY : FALLBACK_API_KEY;
 
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Server misconfiguration: API Key missing in env. Check ESA Console." }), { status: 500 });
+      return new Response(JSON.stringify({ error: "Server misconfiguration: API Key missing." }), { status: 500 });
     }
 
     const aiResponse = await fetch("https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", {
@@ -155,7 +158,7 @@ async function handleChat(request, env) {
         throw new Error(`AI API Error (${aiResponse.status}): ${JSON.stringify(aiData)}`);
     }
 
-    const responseText = aiData.choices[0].message.content;
+    const responseText = aiData.choices?.[0]?.message?.content || "Error: No content generated.";
 
     const newHistory = [
       ...history,
