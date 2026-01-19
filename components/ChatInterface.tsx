@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PersonaProfile, ChatMessage } from '../types';
-import { Send, PlusCircle, User, Cpu, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Send, PlusCircle, AlertTriangle, RefreshCw } from 'lucide-react';
 import { edgeClient } from '../services/edgeClient';
 
 interface Props {
