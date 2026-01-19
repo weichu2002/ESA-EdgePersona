@@ -1,0 +1,5 @@
+{
+  "name": "ESA EdgePersona",
+  "description": "A dynamic digital lifeform construction platform based on edge computing. Evolves through interaction and stores memory in EdgeKV.",
+  "requestFramePermissions": []
+}
